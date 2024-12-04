@@ -51,5 +51,5 @@ Combining a GAN with a Deep Reinforcement Learning agent to produce novel approa
 
 
 ## Architecture
-*In Progress*
+![Diagram](architecture.drawio.svg)
 
