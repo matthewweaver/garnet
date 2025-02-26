@@ -53,3 +53,154 @@ Combining a GAN with a Deep Reinforcement Learning agent to produce novel approa
 ## Architecture
 ![Diagram](architecture.drawio.svg)
 
+<br>
+
+## Deep Exploit
+This project builds upon Deep Exploit, a fully automated penetration testing tool leveraging Metasploit framework. This was created by Isao Takaesu (@13o-bbr-bbq), the original code can be found here
+https://github.com/13o-bbr-bbq/machine_learning_security
+
+Further improvements were added by the team at TheDreamPort for competitions which I have included for training against Metasploitable 3 VM and improved performance.
+https://github.com/TheDreamPort/deep_exploit
+
+In addition to this, I have containerised the code so it is much simpler to setup and use. Only Docker is required and you can automatically build an environment with the exact package versions which have been tested as working. This uses Ubuntu Linux 18.04, and configures the docker image automatically. I also improved the regex to fix multiple bugs and created the setup script to work in a containerised environment. Furthermore I have documented how to use the code.
+
+<br>
+
+### Installation
+
+The following steps assume a unix environment or unix based shell if on windows e.g. gitbash/WSL2. Only Docker is required on the host machine.
+
+1. Clone the Garnet repository and open the directory in your shell
+```
+git clone https://github.com/matthewweaver/garnet
+cd garnet
+```
+<br>
+
+2. Build the docker image locally
+```
+time DOCKER_BUILDKIT=1 docker build -t garnet .
+```
+
+<br>
+
+### Usage
+
+#### Setup
+To test against a vulnerable machine, the simplest option is to download a virtual machine such as Metasploitable 2. 
+https://docs.rapid7.com/metasploit/metasploitable-2/
+
+If using VirtualBox to run the VM, to allow communication between docker and the VM you must modify the network setting of the VM in VirtualBox. Simply change the network adapter to Bridged Adapter, then verify they can communicate by getting the IP of the VM with ```ifconfig``` and look for the eth0 inet IP address. Keep this ```vm_ip``` handy as it is used later. 
+
+Run the docker image (either run from docker desktop UI or ```docker run -dit garnet```).
+
+Open a shell on the running image (either from docker desktop UI or ```docker exec -it <container_id> /bin/bash```).
+
+Ping the IP address of the VM from earlier
+
+```
+ping <vm_ip>
+```
+Ensure it receives bytes back.
+
+Also save the IP address for the docker image ```docker_ip``` with ```ifconfig``` as above.
+
+Set ```server_host``` to your ```<docker_ip>``` in ```deep_exploit/config.ini```
+```
+> nano config.ini
+
+[Common]
+server_host : <docker_ip>
+server_port : 55553
+msgrpc_user : test
+msgrpc_pass : test1234
+```
+
+Ensure ProxyList info in ```/etc/proxychains.conf``` matches the ```proxy_host``` and ```proxy_port``` in ```deep_exploit/config.ini```
+```
+> nano /etc/proxychains.conf
+...snip...
+
+[ProxyList]
+...snip...
+socks4  127.0.0.1 1080
+```
+<br>
+
+#### Metasploit
+
+To run Deep Exploit requires starting the Metasploit framework console. In the shell on the docker image run
+
+```
+msfdb init
+msfconsole
+```
+then start the RPC service to allow Deep Exploit to command it remotely
+```
+load msgrpc ServerHost=<docker_ip> ServerPort=55553 User=test Pass=test1234
+```
+<br>
+
+#### Configure
+
+You can adjust the parameters of the job in the ```deep_exploit/config.ini``` file under ```[A3C]```
+
+```train_worker_num```: the number of workers to run with python threading. Higher consumes more resources on your machine but greatly improves performance.
+
+```train_max_num```: the total number of runs the workers will perform before it will end training
+
+```train_max_steps```: the number of times it will run a particular exploit
+
+```train_tmax```: timeout it will wait for the exploit
+
+<br>
+
+#### Train
+
+Create a new shell on the docker image and run DeepExploit in training mode
+```
+cd deep_exploit
+. ./virtualenv/bin/activate
+time python3 DeepExploit.py -t <vm_ip> -m train
+```
+Note: 
+If hit error ```UnicodeEncodeError: 'ascii' codec can't encode characters in position 99-105: ordinal not in range(128)```
+```
+apt-get install language-pack-en
+export LC_ALL=$(locale -a | grep UTF-8)
+```
+The output will be a trained model stored as checkpoint file under ```deep_exploit/trained_data```
+and a training report under ```deep_exploit/report/train``` containing the vulnarabilities that were successfully exploited on the training machine.
+
+https://html-preview.github.io/?url=https://github.com/matthewweaver/garnet/blob/main/deep_exploit/report/train/DeepExploit_train_report.html
+
+<br>
+
+#### Test
+
+Create a new shell on the docker image and run DeepExploit in testing mode
+```
+cd deep_exploit
+. ./virtualenv/bin/activate
+time python3 DeepExploit.py -t <vm_ip> -m test
+```
+
+This time it will leave open an active session for each shell which was successful in gaining access to the target IP. These can be listed with the following command in the msfconsole shell
+```
+sessions --list
+```
+and one can be activated to enable remote access as follows
+```
+sessions -i <session_id>
+ls
+```
+
+<br>
+
+#### Metasploitable 3
+The latest version of the Metasploitable VM provides more vulnerabilities and the capability to run either windows or linux OS, as well as greater configurability.
+
+To install clone this repo
+https://github.com/rapid7/metasploitable3
+
+Then run the respective quick-start vagrant up command to use a prebuilt image.
