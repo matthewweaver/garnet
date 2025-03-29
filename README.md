@@ -7,19 +7,46 @@
 
 <br>
 
+### Table of Contents
 
-## Summary
-Combining a GAN with a Deep Reinforcement Learning agent to produce novel approaches for penetration testing, which the agent implements and gets feedback.
+- [Garnet](#garnet)
+    - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+    - [Summary](#summary)
+    - [Project Rationale](#project-rationale)
+    - [Literature Review](#literature-review)
+  - [Architecture](#architecture)
+    - [Deep Exploit](#deep-exploit)
+    - [Applying Generative Adversarial Networks](#applying-generative-adversarial-networks)
+  - [Getting Started](#getting-started)
+    - [Documentation](#documentation)
+    - [Installation](#installation)
+    - [Usage](#usage)
+      - [Setup](#setup)
+      - [Metasploit](#metasploit)
+      - [Configure](#configure)
+      - [Train](#train)
+      - [Test](#test)
+      - [Metasploitable 3](#metasploitable-3)
+      - [cGAN](#cgan)
+  - [Branches](#branches)
 
 <br>
 
-## Project Rationale
+## Overview
+
+### Summary
+Combining a GAN with a Deep Reinforcement Learning agent to produce novel approaches for penetration testing.
+
+<br>
+
+### Project Rationale
 - to explore the combination of GANs and Deep Reinforcement Learning, and their application to Cybersecurity
 - to simplify and productionise cutting edge academic papers into open source code, able to scale to real world scenarios
 
 <br>
 
-## Literature Review
+### Literature Review
 
 *Valea, O., & Oprisa, C. (2020). Towards Pentesting Automation Using the Metasploit Framework. Proceedings - 2020 IEEE 16th International Conference on Intelligent Computer Communication and Processing, ICCP 2020, 171–178. https://doi.org/10.1109/ICCP51029.2020.9266234*
 
@@ -33,7 +60,7 @@ Combining a GAN with a Deep Reinforcement Learning agent to produce novel approa
 
 *Pfau, D., & Vinyals, O. (2016). Connecting Generative Adversarial Networks and Actor-Critic Methods. https://arxiv.org/abs/1610.01945*
 
-*Chen, J., Hu, S., Zheng, H., Xing, C., & Zhang, G. (2023). GAIL-PT: An intelligent penetration testing framework with generative adversarial imitation learning. Computers & Security, 126, 103055. https://doi.org/10.1016/J.COSE.2022.103055*
+*Chen, J., Hu, S., Zheng, H., Xing, C., & Zhang, G. (2023). GAIL-PT: An intelligent penetration testing framework with generative adversarial imitation learning. Computers & Security, 126, 103055. https://arxiv.org/pdf/2204.01975*
 
 *Ho, J., & Ermon, S. (2016). Generative Adversarial Imitation Learning. https://arxiv.org/abs/1606.03476*
 
@@ -55,7 +82,7 @@ Combining a GAN with a Deep Reinforcement Learning agent to produce novel approa
 
 <br>
 
-## Deep Exploit
+### Deep Exploit
 This project builds upon Deep Exploit, a fully automated penetration testing tool leveraging Metasploit framework. This was created by Isao Takaesu (@13o-bbr-bbq), the original code can be found here
 https://github.com/13o-bbr-bbq/machine_learning_security
 
@@ -65,6 +92,40 @@ https://github.com/TheDreamPort/deep_exploit
 In addition to this, I have containerised the code so it is much simpler to setup and use. Only Docker is required and you can automatically build an environment with the exact package versions which have been tested as working. This uses Ubuntu Linux 18.04, and configures the docker image automatically. I also improved the regex to fix multiple bugs and created the setup script to work in a containerised environment. Furthermore I have documented how to use the code.
 
 <br>
+
+
+### Applying Generative Adversarial Networks
+
+A GAN trains an unsupervised Generator using a Discriminator. The Discriminator learns to differentiate a real example from a fake one provided by the Generator, and through a reward signal helps the Generator learn to create better fakes. It has the potential to generate novel exploits, which can be a significant improvement over exploring the vast action space through trial and error. This could be particularly effective for the security application as trial and error would draw attention to an agent trying to break into a system.
+
+In the excellent GAIL-PT paper https://arxiv.org/pdf/2204.01975 referenced in the literature review, the researchers applied Generative Adversarial Imitation Learning to Deep Exploit. The actor/critic agent replaces the Generator from a GAN, so the Actor learns a policy and outputs a recommended action when given a state; the Critic guides the Actor through executing actions against a training machine and rewarding if successful; and a Discriminator guides the agent by rewarding actions which imitate the expert knowledge. The networks are alternately trained with the actor/critic agent learning a policy through trial and error, and the Discriminator learning the probability a state-action pair came from the expert knowledge or the agent. 
+
+The limitation is that expert data is expensive to gather. In the GAIL paper, the data is gathered by the same code used to train the model and therefore does not provide significant benefit besides speeding up training. A solution could be to pre-train a Generator module of a GAN on historical exploits and plug this into the advantage function along with the GAIL discriminator. As the Generator learns unsupervised through reward signals, it can learn latent features behind the historical data rather than mimicking expert knowledge. The agent could then optimise how often to explore the latent action space, imitate the expert data, or rely on the policy from its own training. 
+
+So the training takes place in two stages - first the GAN is trained, by providing historical data to a discriminator which learns to differentiate between the output of a generator (given noise) and the real exploits whilst also giving feedback to the generator to improve its generation. 
+After training the GAN, the RL agent can be trained through trial and error against vulnerable machines.
+
+Finally, during testing, the RL agent chooses between the input from the GAN Generator or the GAIL Discriminator if the agent thinks it is better than any exploits it has learned during training or if it runs out of high value actions.
+
+Numerous architectures were tested and I settled on using a Conditional GAN (cGAN) to allow the generator to select between the distinct combinations of port, exploit and payload which NMap determined the machine might be vulnerable to. Without this it would likely generate novel combinations which were extremely unlikely to work. 
+
+GANs are notoriously fragile to train; due to the adversarial nature it is a balancing act to ensure one does not outperform the other. In order to stabilise training a number of techniques were used including: 
+- <b>label smoothing</b> - prevents the discriminator becoming overconfident
+- <b>noise injection</b> - adds entropy to stabilise training
+- <b>balanced learning rates</b> - puts the discriminator at a disadvantage to the generator
+- <b>gradient clipping</b> - prevents exploding gradients
+- <b>wasserstein loss</b> - avoid vanishing gradient
+- <b>dropout regularisation</b> - prevent overfitting
+  
+
+
+
+<br>
+
+## Getting Started
+
+### Documentation
+To understand how the deep exploit code works see [here](./Documentation.md)
 
 ### Installation
 
@@ -204,3 +265,28 @@ To install clone this repo
 https://github.com/rapid7/metasploitable3
 
 Then run the respective quick-start vagrant up command to use a prebuilt image.
+
+<br>
+
+#### cGAN
+To train a cGAN, choose hyperparameters in ```config.ini``` under the heading GAN including:
+- <b>epochs</b> - the number of complete passes through the entire training dataset during training
+- <b>batch_size</b> -  the number of samples  processed together in one forward and backward pass during training
+- <b>latent_dim</b> - the size of the latent space (the input noise vector) used by the generator to produce outputs
+
+Next run
+
+```python gan/cGAN.py```
+
+once a target_tree.json has been created along with the historic data in successful_actions.csv. In this case it consists of vulnerabilities defined by the Metasploitable 2 documentation.
+
+This saves the Keras model as cGAN.keras under gan/models/, which will be loaded by future runs of DeepExploit.
+
+<br>
+
+## Branches
+If you want the original Deep Exploit tool production ready with Docker, the standalone is on the branch ```deep-exploit```.
+
+If you want to try GAIL-PT, which uses adversarial imitation learning to help train the agent with "expert knowledge", the changes from this paper https://arxiv.org/pdf/2204.01975 referenced in the literature review have been added on the branch ```gail-pt```.
+
+The main branch of this repository contains the additional code for combining a GAN with an RL Agent; Garnet.
